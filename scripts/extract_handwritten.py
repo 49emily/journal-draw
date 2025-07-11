@@ -283,17 +283,3 @@ def extract_text_chars(img, output_dir):
         roi = img[y : y + h, x : x + w]
         filename = "char" + str(char_idx) + ".jpg"
         save_img(chars_path, filename=filename, img=roi)
-
-
-if __name__ == "__main__":
-    # provide the indut/outpur directory paths
-    input_dir = os.path.join(os.getcwd(), "images")
-    output_dir = os.path.join(os.getcwd(), "output")
-
-    for img_file in os.listdir(input_dir):
-        img_file_path = os.path.join(input_dir, img_file)
-        image, rescaled_image = read_image(img_path=img_file_path)
-        img_out_dir = os.path.join(output_dir, img_file.split(".")[0])
-        extract_text_lines(rescaled_image, img_out_dir)
-        extract_handwriting_png(img_out_dir)
-        # extract_text_chars(image, img_out_dir)
