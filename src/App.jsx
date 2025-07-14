@@ -140,6 +140,7 @@ function App() {
   const [brushType, setBrushType] = useState("pencil"); // "pencil", "ribbon", or "text"
   const [textSentences, setTextSentences] = useState([]);
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
+  const [canvasHistory, setCanvasHistory] = useState([]);
   const canvasRef = useRef(null);
   const fabricCanvasRef = useRef(null);
   const fabricCanvasInstance = useRef(null);
@@ -184,14 +185,32 @@ function App() {
     currentSentenceIndexRef.current = currentSentenceIndex;
   }, [currentSentenceIndex]);
 
+  // Set default brush type when entering results page
+  useEffect(() => {
+    if (currentPage === "results") {
+      // Priority: ribbon (if image) > text (if text) > pencil (fallback)
+      if (processedImage) {
+        setBrushType("ribbon");
+      } else if (textContent) {
+        setBrushType("text");
+      } else {
+        setBrushType("pencil");
+      }
+    }
+  }, [currentPage, processedImage, textContent]);
+
   // Initialize Fabric canvas
   useEffect(() => {
     console.log("calling init fabric canvas");
     console.log(brushType);
     if (currentPage === "results" && fabricCanvasRef.current && !fabricCanvasInstance.current) {
+      // Calculate canvas size based on screen width
+      const isMobile = window.innerWidth <= 768;
+      const canvasSize = isMobile ? Math.min(window.innerWidth - 40, 400) : 700;
+
       const canvas = new fabric.Canvas(fabricCanvasRef.current, {
-        width: 700,
-        height: 700,
+        width: canvasSize,
+        height: canvasSize,
         backgroundColor: "#000000",
         isDrawingMode: true,
       });
@@ -246,6 +265,25 @@ function App() {
       });
 
       fabricCanvasInstance.current = canvas;
+
+      // Handle window resize for mobile responsiveness
+      const handleResize = () => {
+        if (fabricCanvasInstance.current) {
+          const isMobile = window.innerWidth <= 768;
+          const canvasSize = isMobile ? Math.min(window.innerWidth - 40, 400) : 700;
+          fabricCanvasInstance.current.setDimensions({
+            width: canvasSize,
+            height: canvasSize,
+          });
+        }
+      };
+
+      window.addEventListener("resize", handleResize);
+
+      // Cleanup resize listener
+      return () => {
+        window.removeEventListener("resize", handleResize);
+      };
     }
 
     // Cleanup when component unmounts or page changes
@@ -281,9 +319,6 @@ function App() {
   // Switch brush type
   const switchBrushType = (type) => {
     // Don't allow switching to ribbon if exhausted
-    if (type === "ribbon" && ribbonExhausted) {
-      return;
-    }
 
     setBrushType(type);
     brushTypeRef.current = type; // Update ref for event handlers
@@ -379,11 +414,17 @@ function App() {
   };
 
   const extractHandwriting = async () => {
-    if (!selectedImage) return;
-
     setIsProcessing(true);
     setLoadingProgress(0);
     setProcessedImage(null);
+
+    // If there's no image, skip image processing and go to results
+    if (!selectedImage) {
+      setLoadingProgress(100);
+      setCurrentPage("results");
+      setIsProcessing(false);
+      return;
+    }
 
     try {
       // Load image
@@ -633,7 +674,7 @@ function App() {
 
       <div className="main-content">
         {currentPage === "upload" && (
-          <>
+          <div className="upload-container">
             <div className="section">
               <div className="section-header">
                 <span className="section-title">
@@ -726,7 +767,7 @@ function App() {
             <div className="action-panel">
               <button
                 className="action-btn"
-                disabled={!selectedImage || isProcessing}
+                disabled={(!selectedImage && !textContent) || isProcessing}
                 onClick={extractHandwriting}
               >
                 {isProcessing ? "[PROCESSING...]" : "[PROCESS DATA]"}
@@ -741,18 +782,15 @@ function App() {
                 [CLEAR ALL]
               </button>
             </div>
-          </>
+          </div>
         )}
 
         {currentPage === "results" && (
-          <>
-            <div className="section">
-              <div className="section-header">
-                <span className="section-title">[PROCESSING RESULTS]</span>
-                <button className="clear-btn" onClick={goBack}>
-                  [BACK TO UPLOAD]
-                </button>
-              </div>
+          <div className="results-container">
+            <div className="actions">
+              <button className="clear-btn" onClick={goBack}>
+                [BACK TO UPLOAD]
+              </button>
             </div>
 
             {/* Debug Images Section
@@ -795,32 +833,38 @@ function App() {
                 <div className="canvas-controls">
                   <div className="brush-selector">
                     <button
-                      className={`brush-btn ${brushType === "pencil" ? "active" : ""}`}
-                      onClick={() => switchBrushType("pencil")}
-                    >
-                      [PENCIL]
-                    </button>
-                    <button
                       className={`brush-btn ${brushType === "ribbon" ? "active" : ""}`}
                       onClick={() => switchBrushType("ribbon")}
                       disabled={!processedImage}
                     >
-                      [RIBBON]
+                      <span className="brush-icon">✎</span>
+                      <br />
+                      [WRITE]
                     </button>
                     <button
                       className={`brush-btn ${brushType === "text" ? "active" : ""}`}
                       onClick={() => switchBrushType("text")}
-                      disabled={!textContent || currentSentenceIndex >= textSentences.length}
+                      disabled={!textContent}
                     >
-                      [TEXT]
+                      <span className="brush-icon">🇦</span>
+                      <br />
+                      [TYPE]
+                    </button>
+                    <button
+                      className={`brush-btn ${brushType === "pencil" ? "active" : ""}`}
+                      onClick={() => switchBrushType("pencil")}
+                    >
+                      <span className="brush-icon">ᝰ</span>
+                      <br />
+                      [DRAW]
                     </button>
                   </div>
                   {brushType === "ribbon" && (
                     <div className="ribbon-progress">
                       <span>
                         {ribbonExhausted
-                          ? "RIBBON EXHAUSTED"
-                          : `RIBBON PROGRESS: ${ribbonProgress}%`}
+                          ? "WRITING EXHAUSTED"
+                          : `WRITING PROGRESS: ${ribbonProgress}%`}
                       </span>
                       <button
                         className="reset-btn"
@@ -834,7 +878,7 @@ function App() {
                       </button>
                     </div>
                   )}
-                  {textSentences.length > 0 && (
+                  {brushType === "text" && textSentences.length > 0 && (
                     <div className="text-status">
                       {currentSentenceIndex < textSentences.length ? (
                         <span>SENTENCES: {textSentences.length - currentSentenceIndex} LEFT</span>
@@ -889,15 +933,19 @@ function App() {
                 [CHANGE INPUTS]
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
 
       <div className="footer">
         <div className="footer-text">
-          STATUS: {isProcessing ? "PROCESSING" : "OPERATIONAL"} | made with{" "}
-          <a target="_blank" href="https://github.com/49emily/journal-draw">
-            🩷
+          STATUS: {isProcessing ? "PROCESSING" : "OPERATIONAL"} | built with{" "}
+          <a
+            className="emoji-icon accent"
+            target="_blank"
+            href="https://github.com/49emily/journal-draw"
+          >
+            ✎
           </a>
         </div>
       </div>
