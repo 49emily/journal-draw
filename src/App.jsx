@@ -6,8 +6,8 @@ import RibbonBrush from "./RibbonBrush";
 import "./App.css";
 
 function App() {
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
+  const [selectedImages, setSelectedImages] = useState([]); // Changed from selectedImage to selectedImages array
+  const [imagePreviews, setImagePreviews] = useState([]); // Changed from imagePreview to imagePreviews array
   const [textContent, setTextContent] = useState("");
   const [processedImage, setProcessedImage] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -214,6 +214,7 @@ function App() {
 
   // Convert HEIC to JPEG
   const convertHeicToJpeg = async (file) => {
+    console.log("converting heic to jpeg");
     if (file.type === "image/heic" || file.name.toLowerCase().endsWith(".heic")) {
       try {
         const convertedBlob = await heicTo({
@@ -238,13 +239,16 @@ function App() {
   };
 
   const handleImageUpload = async (event) => {
-    const file = event.target.files[0];
-    if (file) {
+    const files = Array.from(event.target.files);
+    const availableSlots = 4 - selectedImages.length;
+    const filesToProcess = files.slice(0, availableSlots);
+
+    for (const file of filesToProcess) {
       const convertedFile = await convertHeicToJpeg(file);
-      setSelectedImage(convertedFile);
+      setSelectedImages((prev) => [...prev, convertedFile]);
       const reader = new FileReader();
       reader.onload = (e) => {
-        setImagePreview(e.target.result);
+        setImagePreviews((prev) => [...prev, e.target.result]);
       };
       reader.readAsDataURL(convertedFile);
     }
@@ -252,13 +256,18 @@ function App() {
 
   const handleImageDrop = async (event) => {
     event.preventDefault();
-    const file = event.dataTransfer.files[0];
-    if (file && (file.type.startsWith("image/") || file.name.toLowerCase().endsWith(".heic"))) {
+    const files = Array.from(event.dataTransfer.files);
+    const availableSlots = 4 - selectedImages.length;
+    const filesToProcess = files
+      .filter((file) => file.type.startsWith("image/") || file.name.toLowerCase().endsWith(".heic"))
+      .slice(0, availableSlots);
+
+    for (const file of filesToProcess) {
       const convertedFile = await convertHeicToJpeg(file);
-      setSelectedImage(convertedFile);
+      setSelectedImages((prev) => [...prev, convertedFile]);
       const reader = new FileReader();
       reader.onload = (e) => {
-        setImagePreview(e.target.result);
+        setImagePreviews((prev) => [...prev, e.target.result]);
       };
       reader.readAsDataURL(convertedFile);
     }
@@ -269,10 +278,15 @@ function App() {
   };
 
   const clearImage = () => {
-    setSelectedImage(null);
-    setImagePreview(null);
+    setSelectedImages([]);
+    setImagePreviews([]);
     setProcessedImage(null);
     setCurrentPage("upload");
+  };
+
+  const removeImage = (index) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
   const clearText = () => {
@@ -291,7 +305,7 @@ function App() {
     setProcessedImage(null);
 
     // If there's no image, skip image processing and go to results
-    if (!selectedImage) {
+    if (!selectedImages.length) {
       setLoadingProgress(100);
       setCurrentPage("results");
       setIsProcessing(false);
@@ -299,198 +313,207 @@ function App() {
     }
 
     try {
-      // Load image
-      const img = new Image();
-      img.onload = () => {
-        setLoadingProgress(10);
-        // Create canvas to get image data
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext("2d");
+      const allProcessedLines = [];
+      const totalImages = selectedImages.length;
 
-        // Scale image down (similar to Python's 18% scale)
-        const scale = 0.18;
-        const scaledWidth = Math.floor(img.width * scale);
-        const scaledHeight = Math.floor(img.height * scale);
+      // Process each image
+      for (let imageIndex = 0; imageIndex < totalImages; imageIndex++) {
+        const progressStart = (imageIndex / totalImages) * 80;
+        const progressEnd = ((imageIndex + 1) / totalImages) * 80;
 
-        canvas.width = scaledWidth;
-        canvas.height = scaledHeight;
-        ctx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
+        setLoadingProgress(progressStart);
 
-        // Get image data and create OpenCV matrix
-        const imageData = ctx.getImageData(0, 0, scaledWidth, scaledHeight);
-        const src = cv.matFromImageData(imageData);
-        setLoadingProgress(20);
+        const img = new Image();
+        await new Promise((resolve) => {
+          img.onload = () => {
+            // Create canvas to get image data
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext("2d");
 
-        // Convert to grayscale
-        const gray = new cv.Mat();
-        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-        setLoadingProgress(30);
+            // Scale image down (similar to Python's 18% scale)
+            const scale = 0.18;
+            const scaledWidth = Math.floor(img.width * scale);
+            const scaledHeight = Math.floor(img.height * scale);
 
-        // Apply median blur
-        const blurred = new cv.Mat();
-        cv.medianBlur(gray, blurred, 5);
-        setLoadingProgress(40);
+            canvas.width = scaledWidth;
+            canvas.height = scaledHeight;
+            ctx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
 
-        // Apply adaptive threshold
-        const thresh = new cv.Mat();
-        cv.adaptiveThreshold(
-          blurred,
-          thresh,
-          255,
-          cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-          cv.THRESH_BINARY_INV,
-          5,
-          5
-        );
-        setLoadingProgress(50);
+            // Get image data and create OpenCV matrix
+            const imageData = ctx.getImageData(0, 0, scaledWidth, scaledHeight);
+            const src = cv.matFromImageData(imageData);
 
-        // Save debug image - thresholded
-        const debugImages = {};
-        debugImages.thresholded = matToImageData(thresh);
-        setLoadingProgress(60);
+            // Convert to grayscale
+            const gray = new cv.Mat();
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-        // Create morphological kernel for line detection
-        const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(16, 2));
-        const dilated = new cv.Mat();
-        cv.dilate(thresh, dilated, kernel, new cv.Point(-1, -1), 2);
-        setLoadingProgress(70);
+            // Apply median blur
+            const blurred = new cv.Mat();
+            cv.medianBlur(gray, blurred, 5);
 
-        // Find contours
-        const contours = new cv.MatVector();
-        const hierarchy = new cv.Mat();
-        cv.findContours(dilated, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-        setLoadingProgress(80);
+            // Apply adaptive threshold
+            const thresh = new cv.Mat();
+            cv.adaptiveThreshold(
+              blurred,
+              thresh,
+              255,
+              cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+              cv.THRESH_BINARY_INV,
+              5,
+              5
+            );
 
-        // Process each contour (text line)
-        const processedLines = [];
-        for (let i = 0; i < contours.size(); i++) {
-          const contour = contours.get(i);
-          const rect = cv.boundingRect(contour);
+            // Create morphological kernel for line detection
+            const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(16, 2));
+            const dilated = new cv.Mat();
+            cv.dilate(thresh, dilated, kernel, new cv.Point(-1, -1), 2);
 
-          // Skip very small contours
-          if (rect.width < 10 || rect.height < 5) continue;
+            // Find contours
+            const contours = new cv.MatVector();
+            const hierarchy = new cv.Mat();
+            cv.findContours(dilated, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-          // Extract region of interest from original grayscale image
-          const roi = gray.roi(rect);
+            // Process each contour (text line)
+            const processedLines = [];
+            for (let i = 0; i < contours.size(); i++) {
+              const contour = contours.get(i);
+              const rect = cv.boundingRect(contour);
 
-          // Apply light gaussian blur
-          const filtered = new cv.Mat();
-          cv.GaussianBlur(roi, filtered, new cv.Size(3, 3), 0);
+              // Skip very small contours
+              if (rect.width < 10 || rect.height < 5) continue;
 
-          // Apply adaptive threshold for handwriting extraction
-          const handwritingThresh = new cv.Mat();
-          cv.adaptiveThreshold(
-            filtered,
-            handwritingThresh,
-            255,
-            cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv.THRESH_BINARY,
-            7,
-            4
-          );
+              // Extract region of interest from original grayscale image
+              const roi = gray.roi(rect);
 
-          // Create 4-channel image for transparency with white handwriting
-          const channels = new cv.MatVector();
+              // Apply light gaussian blur
+              const filtered = new cv.Mat();
+              cv.GaussianBlur(roi, filtered, new cv.Size(3, 3), 0);
 
-          // Create white handwriting by inverting the threshold for RGB channels
-          const whiteHandwriting = new cv.Mat();
-          cv.bitwise_not(handwritingThresh, whiteHandwriting);
+              // Apply adaptive threshold for handwriting extraction
+              const handwritingThresh = new cv.Mat();
+              cv.adaptiveThreshold(
+                filtered,
+                handwritingThresh,
+                255,
+                cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv.THRESH_BINARY,
+                7,
+                4
+              );
 
-          channels.push_back(whiteHandwriting); // Blue channel (white)
-          channels.push_back(whiteHandwriting); // Green channel (white)
-          channels.push_back(whiteHandwriting); // Red channel (white)
+              // Create 4-channel image for transparency with white handwriting
+              const channels = new cv.MatVector();
 
-          // Create alpha channel (inverted threshold - handwriting visible, background transparent)
-          const alpha = new cv.Mat();
-          cv.bitwise_not(handwritingThresh, alpha);
-          channels.push_back(alpha);
+              // Create white handwriting by inverting the threshold for RGB channels
+              const whiteHandwriting = new cv.Mat();
+              cv.bitwise_not(handwritingThresh, whiteHandwriting);
 
-          const transparent = new cv.Mat();
-          cv.merge(channels, transparent);
+              channels.push_back(whiteHandwriting); // Blue channel (white)
+              channels.push_back(whiteHandwriting); // Green channel (white)
+              channels.push_back(whiteHandwriting); // Red channel (white)
 
-          processedLines.push({
-            image: matToImageData(transparent),
-            rect: rect,
-            index: i,
-          });
+              // Create alpha channel (inverted threshold - handwriting visible, background transparent)
+              const alpha = new cv.Mat();
+              cv.bitwise_not(handwritingThresh, alpha);
+              channels.push_back(alpha);
 
-          // Clean up
-          roi.delete();
-          filtered.delete();
-          handwritingThresh.delete();
-          whiteHandwriting.delete();
-          alpha.delete();
-          transparent.delete();
-          channels.delete();
-        }
+              const transparent = new cv.Mat();
+              cv.merge(channels, transparent);
 
-        // Sort lines by y-coordinate (top to bottom)
-        processedLines.sort((a, b) => a.rect.y - b.rect.y);
+              processedLines.push({
+                image: matToImageData(transparent),
+                rect: rect,
+                index: i,
+                imageIndex: imageIndex,
+              });
 
-        // Create concatenated image (skip the first/largest contour which is usually the whole image)
-        if (processedLines.length > 1) {
-          // Find the largest contour (by area) and skip it
-          const largestContourIndex = processedLines.reduce((maxIndex, line, index) => {
-            const area = line.rect.width * line.rect.height;
-            const maxArea =
-              processedLines[maxIndex].rect.width * processedLines[maxIndex].rect.height;
-            return area > maxArea ? index : maxIndex;
-          }, 0);
+              // Clean up
+              roi.delete();
+              filtered.delete();
+              handwritingThresh.delete();
+              whiteHandwriting.delete();
+              alpha.delete();
+              transparent.delete();
+              channels.delete();
+            }
 
-          // Filter out the largest contour
-          const linesToConcatenate = processedLines.filter(
-            (_, index) => index !== largestContourIndex
-          );
+            // Sort lines by y-coordinate (top to bottom)
+            processedLines.sort((a, b) => a.rect.y - b.rect.y);
 
-          if (linesToConcatenate.length > 0) {
-            // Find max height
-            const maxHeight = Math.max(...linesToConcatenate.map((line) => line.rect.height));
-            const totalWidth = linesToConcatenate.reduce((sum, line) => sum + line.rect.width, 0);
+            // Filter out the largest contour (usually the whole image)
+            if (processedLines.length > 1) {
+              const largestContourIndex = processedLines.reduce((maxIndex, line, index) => {
+                const area = line.rect.width * line.rect.height;
+                const maxArea =
+                  processedLines[maxIndex].rect.width * processedLines[maxIndex].rect.height;
+                return area > maxArea ? index : maxIndex;
+              }, 0);
 
-            // Create canvas for concatenated image
-            const concatCanvas = document.createElement("canvas");
-            concatCanvas.width = totalWidth;
-            concatCanvas.height = maxHeight;
-            const concatCtx = concatCanvas.getContext("2d");
+              const linesToAdd = processedLines.filter((_, index) => index !== largestContourIndex);
 
-            // Draw each line
-            let currentX = 0;
-            linesToConcatenate.forEach((line) => {
-              const lineImg = new Image();
-              lineImg.onload = () => {
-                concatCtx.drawImage(lineImg, currentX, 0);
-                currentX += line.rect.width;
-              };
-              lineImg.src = line.image;
-            });
+              allProcessedLines.push(...linesToAdd);
+            }
 
-            // Set concatenated image after a short delay to ensure all images are loaded
-            setTimeout(() => {
-              setProcessedImage(concatCanvas.toDataURL());
+            // Clean up
+            src.delete();
+            gray.delete();
+            blurred.delete();
+            thresh.delete();
+            kernel.delete();
+            dilated.delete();
+            contours.delete();
+            hierarchy.delete();
+
+            setLoadingProgress(progressEnd);
+            resolve();
+          };
+          img.src = imagePreviews[imageIndex];
+        });
+      }
+
+      setLoadingProgress(85);
+
+      // Concatenate all processed lines from all images
+      if (allProcessedLines.length > 0) {
+        // Find max height across all lines
+        const maxHeight = Math.max(...allProcessedLines.map((line) => line.rect.height));
+        const totalWidth = allProcessedLines.reduce((sum, line) => sum + line.rect.width, 0);
+
+        // Create canvas for final concatenated image
+        const finalCanvas = document.createElement("canvas");
+        finalCanvas.width = totalWidth;
+        finalCanvas.height = maxHeight;
+        const finalCtx = finalCanvas.getContext("2d");
+
+        // Draw each line sequentially
+        let currentX = 0;
+        let loadedImages = 0;
+
+        allProcessedLines.forEach((line) => {
+          const lineImg = new Image();
+          lineImg.onload = () => {
+            finalCtx.drawImage(lineImg, currentX, 0);
+            currentX += line.rect.width;
+            loadedImages++;
+
+            // When all images are loaded, set the final result
+            if (loadedImages === allProcessedLines.length) {
+              setProcessedImage(finalCanvas.toDataURL());
               setLoadingProgress(100);
               setCurrentPage("results");
-            }, 100);
-          }
-        }
-
-        setLoadingProgress(90);
-
-        // Clean up
-        src.delete();
-        gray.delete();
-        blurred.delete();
-        thresh.delete();
-        kernel.delete();
-        dilated.delete();
-        contours.delete();
-        hierarchy.delete();
-
+              setIsProcessing(false);
+            }
+          };
+          lineImg.src = line.image;
+        });
+      } else {
+        // No lines found, still go to results
+        setLoadingProgress(100);
+        setCurrentPage("results");
         setIsProcessing(false);
-      };
-
-      img.src = imagePreview;
+      }
     } catch (error) {
-      console.error("Error processing image:", error);
+      console.error("Error processing images:", error);
       setIsProcessing(false);
     }
   };
@@ -538,7 +561,7 @@ function App() {
     <div className="app">
       {isProcessing && <LoadingOverlay />}
       <div className="terminal-header">
-        <div className="header-text">
+        <div className="header-text" onClick={() => setCurrentPage("upload")}>
           draw with your <span className="accent">journal entries</span>
         </div>
         <div className="status-bar">(づ๑•ᴗ•๑)づ♡ {new Date().toLocaleTimeString()}</div>
@@ -550,7 +573,7 @@ function App() {
             <div className="section">
               <div className="section-header">
                 <span className="section-title">
-                  [IMAGES OF YOUR <span className="accent">PHYSICAL JOURNAL ENTRIES</span>]
+                  [IMAGE(S) OF YOUR <span className="accent">PHYSICAL JOURNAL ENTRIES</span>]
                 </span>
                 <div className="section-header-right">
                   <span className="info-icon">
@@ -566,9 +589,9 @@ function App() {
                       </ul>
                     </div>
                   </span>
-                  {selectedImage && (
+                  {selectedImages.length > 0 && (
                     <button className="clear-btn" onClick={clearImage}>
-                      [CLEAR]
+                      [CLEAR ALL]
                     </button>
                   )}
                 </div>
@@ -579,24 +602,40 @@ function App() {
                 onDrop={handleImageDrop}
                 onDragOver={handleDragOver}
               >
-                {imagePreview ? (
-                  <div className="image-preview">
-                    <img src={imagePreview} alt="Preview" className="preview-image" />
-                    <div className="image-info">
-                      FILE: {selectedImage.name}
-                      <br />
-                      SIZE: {(selectedImage.size / 1024).toFixed(2)} KB
-                      <br />
-                      TYPE: {selectedImage.type}
-                    </div>
+                {imagePreviews.length > 0 ? (
+                  <div className="image-preview-container">
+                    {imagePreviews.map((preview, index) => (
+                      <div key={index} className="image-preview-item">
+                        <img src={preview} alt={`Preview ${index + 1}`} className="preview-image" />
+                        <div className="image-info">
+                          FILE: {selectedImages[index]?.name || `Image ${index + 1}`}
+                          <br />
+                          SIZE: {(selectedImages[index]?.size / 1024).toFixed(2)} KB
+                          <br />
+                          TYPE: {selectedImages[index]?.type}
+                        </div>
+                        <button className="remove-image-btn" onClick={() => removeImage(index)}>
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {selectedImages.length < 4 && (
+                      <div className="upload-placeholder small">
+                        <div className="upload-icon">+</div>
+                        <div className="upload-text">
+                          ADD MORE
+                          <br />({selectedImages.length}/4)
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="upload-placeholder">
                     <div className="upload-icon">📁</div>
                     <div className="upload-text">
-                      DRAG & DROP IMAGE HERE
+                      DRAG & DROP IMAGES HERE
                       <br />
-                      OR CLICK TO SELECT
+                      OR CLICK TO SELECT (UP TO 4)
                     </div>
                   </div>
                 )}
@@ -606,6 +645,7 @@ function App() {
                   accept="image/*"
                   onChange={handleImageUpload}
                   className="file-input"
+                  multiple // Allow multiple file selection
                 />
               </div>
             </div>
@@ -639,7 +679,7 @@ function App() {
             <div className="action-panel">
               <button
                 className="action-btn"
-                disabled={(!selectedImage && !textContent) || isProcessing}
+                disabled={(!selectedImages.length && !textContent) || isProcessing}
                 onClick={extractHandwriting}
               >
                 {isProcessing ? "[PROCESSING...]" : "[PROCESS DATA]"}
@@ -701,7 +741,9 @@ function App() {
             {/* Drawing Canvas Section */}
             <div className="section">
               <div className="section-header">
-                <span className="section-title">[NOW DRAW!]</span>
+                <span className="section-title">
+                  [NOW <span className="accent">DRAW!</span>]
+                </span>
                 <div className="canvas-controls">
                   <div className="brush-selector">
                     <button
