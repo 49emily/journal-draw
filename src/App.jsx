@@ -3,6 +3,95 @@ import * as fabric from "fabric";
 import cv from "@techstark/opencv-js";
 import "./App.css";
 
+// Custom Ribbon Brush that draws image slices along the path
+class RibbonBrush extends fabric.BaseBrush {
+  constructor(canvas, image) {
+    super(canvas);
+    this.image = image;
+    this.sliceWidth = 10; // Width of each slice
+    this.slices = [];
+    this.currentSliceIndex = 0;
+    this.path = [];
+    this.createSlices();
+  }
+
+  createSlices() {
+    if (!this.image) return;
+
+    // Create a temporary canvas to slice the image
+    const tempCanvas = document.createElement("canvas");
+    const tempCtx = tempCanvas.getContext("2d");
+
+    tempCanvas.width = this.image.width;
+    tempCanvas.height = this.image.height;
+    tempCtx.drawImage(this.image, 0, 0);
+
+    // Create slices
+    this.slices = [];
+    for (let x = 0; x < this.image.width; x += this.sliceWidth) {
+      const sliceCanvas = document.createElement("canvas");
+      const sliceCtx = sliceCanvas.getContext("2d");
+
+      sliceCanvas.width = this.sliceWidth;
+      sliceCanvas.height = this.image.height;
+
+      // Extract slice from original image
+      const sliceWidth = Math.min(this.sliceWidth, this.image.width - x);
+      const imageData = tempCtx.getImageData(x, 0, sliceWidth, this.image.height);
+      sliceCtx.putImageData(imageData, 0, 0);
+
+      this.slices.push(sliceCanvas);
+    }
+  }
+
+  onMouseDown(pointer) {
+    this.path = [pointer];
+    this.currentSliceIndex = 0;
+    this.canvas.requestRenderAll();
+  }
+
+  onMouseMove(pointer) {
+    if (this.path.length > 0) {
+      this.path.push(pointer);
+      this.drawSliceAtPoint(pointer);
+      this.canvas.requestRenderAll();
+    }
+  }
+
+  onMouseUp() {
+    this.path = [];
+    this.currentSliceIndex = 0;
+  }
+
+  drawSliceAtPoint(point) {
+    if (this.slices.length === 0) return;
+
+    const slice = this.slices[this.currentSliceIndex % this.slices.length];
+
+    // Calculate angle from previous point if available
+    let angle = 0;
+    if (this.path.length > 1) {
+      const prev = this.path[this.path.length - 2];
+      const curr = point;
+      angle = Math.atan2(curr.y - prev.y, curr.x - prev.x);
+    }
+
+    // Create fabric image from slice
+    const fabricImage = new fabric.Image(slice, {
+      left: point.x - this.sliceWidth / 2,
+      top: point.y - slice.height / 2,
+      angle: (angle * 180) / Math.PI,
+      originX: "center",
+      originY: "center",
+      selectable: false,
+      evented: false,
+    });
+
+    this.canvas.add(fabricImage);
+    this.currentSliceIndex++;
+  }
+}
+
 function App() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -12,13 +101,13 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentPage, setCurrentPage] = useState("upload"); // "upload" or "results"
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [brushType, setBrushType] = useState("pencil"); // "pencil" or "pattern"
+  const [brushType, setBrushType] = useState("pencil"); // "pencil", "ribbon", or "text"
   const [textSentences, setTextSentences] = useState([]);
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
   const canvasRef = useRef(null);
   const fabricCanvasRef = useRef(null);
   const fabricCanvasInstance = useRef(null);
-  const patternBrush = useRef(null);
+  const ribbonBrush = useRef(null);
   const brushTypeRef = useRef("pencil");
   const textSentencesRef = useRef([]);
   const currentSentenceIndexRef = useRef(0);
@@ -132,19 +221,13 @@ function App() {
     };
   }, [currentPage, brushType, textSentences, currentSentenceIndex]);
 
-  // Create pattern brush when processedImage is available
+  // Create ribbon brush when processedImage is available
   useEffect(() => {
     if (processedImage && fabricCanvasInstance.current) {
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => {
-        const pattern = new fabric.Pattern({
-          source: img,
-          repeat: "repeat",
-        });
-        patternBrush.current = new fabric.PatternBrush(fabricCanvasInstance.current);
-        patternBrush.current.getPatternSrc = () => pattern;
-        patternBrush.current.width = 20;
+        ribbonBrush.current = new RibbonBrush(fabricCanvasInstance.current, img);
       };
       img.src = processedImage;
     }
@@ -160,8 +243,8 @@ function App() {
         brush.color = "#ffffff";
         brush.width = 3;
         fabricCanvasInstance.current.freeDrawingBrush = brush;
-      } else if (type === "pattern" && patternBrush.current) {
-        fabricCanvasInstance.current.freeDrawingBrush = patternBrush.current;
+      } else if (type === "ribbon" && ribbonBrush.current) {
+        fabricCanvasInstance.current.freeDrawingBrush = ribbonBrush.current;
       } else if (type === "text") {
         const brush = new fabric.PencilBrush(fabricCanvasInstance.current);
         brush.color = "#ffffff";
@@ -467,7 +550,7 @@ function App() {
     <div className="app">
       {isProcessing && <LoadingOverlay />}
       <div className="terminal-header">
-        <div className="header-text">draw with your journal entries</div>
+        <div className="header-text accent">draw with your journal entries</div>
         <div className="status-bar">(づ๑•ᴗ•๑)づ♡ {new Date().toLocaleTimeString()}</div>
       </div>
 
@@ -622,11 +705,11 @@ function App() {
                       [PENCIL]
                     </button>
                     <button
-                      className={`brush-btn ${brushType === "pattern" ? "active" : ""}`}
-                      onClick={() => switchBrushType("pattern")}
+                      className={`brush-btn ${brushType === "ribbon" ? "active" : ""}`}
+                      onClick={() => switchBrushType("ribbon")}
                       disabled={!processedImage}
                     >
-                      [PATTERN]
+                      [RIBBON]
                     </button>
                     <button
                       className={`brush-btn ${brushType === "text" ? "active" : ""}`}
