@@ -32,7 +32,7 @@
 
 .terminal-header {
   border-bottom: 2px solid #ffffff;
-  padding: 15px 20px;
+  padding: 20px 20px;
   background: rgba(255, 255, 255, 0.1);
   box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
 }
@@ -94,6 +94,99 @@
   font-weight: 700;
   font-size: 16px;
   text-shadow: 0 0 5px #ffffff;
+}
+
+.section-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #ffffff;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: help;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.info-icon:hover {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+}
+
+.info-tooltip {
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.95);
+  border: 1px solid #ffffff;
+  border-radius: 4px;
+  padding: 12px;
+  min-width: 280px;
+  max-width: 350px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  z-index: 1001;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+}
+
+.info-tooltip::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 5px solid #ffffff;
+}
+
+.info-icon:hover .info-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.tooltip-title {
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 8px;
+  text-shadow: 0 0 5px #ffffff;
+}
+
+.tooltip-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tooltip-list li {
+  margin-bottom: 4px;
+  padding-left: 10px;
+  position: relative;
+}
+
+.tooltip-list li::before {
+  content: ">";
+  position: absolute;
+  left: 0;
+  color: #ffffff;
+  font-weight: 700;
 }
 
 .clear-btn {
@@ -582,6 +675,15 @@
   box-shadow: 0 0 8px rgba(204, 204, 204, 0.5);
 }
 
+.ribbon-progress {
+  font-size: 10px;
+  color: #fb1abf;
+  text-shadow: 0 0 3px #fb1abf;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 @media (max-width: 768px) {
   .canvas-controls {
     flex-direction: column;
@@ -613,5 +715,6 @@
 }
 
 .accent {
-  color: "#FB1ABF";
+  color: #fb1abf !important;
+  text-shadow: 0 0 10px #fb1abf !important;
 }

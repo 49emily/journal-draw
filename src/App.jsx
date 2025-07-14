@@ -1,17 +1,20 @@
 import { useState, useRef, useEffect } from "react";
 import * as fabric from "fabric";
 import cv from "@techstark/opencv-js";
+import { heicTo } from "heic-to";
 import "./App.css";
 
 // Custom Ribbon Brush that draws image slices along the path
 class RibbonBrush extends fabric.BaseBrush {
-  constructor(canvas, image) {
+  constructor(canvas, image, onProgress, onExhausted) {
     super(canvas);
     this.image = image;
-    this.sliceWidth = 10; // Width of each slice
+    this.sliceWidth = 20; // Width of each slice
     this.slices = [];
     this.currentSliceIndex = 0;
     this.path = [];
+    this.onProgress = onProgress; // Callback to update parent component
+    this.onExhausted = onExhausted; // Callback when brush is exhausted
     this.createSlices();
   }
 
@@ -42,15 +45,41 @@ class RibbonBrush extends fabric.BaseBrush {
 
       this.slices.push(sliceCanvas);
     }
+
+    // Initialize progress
+    this.updateProgress();
+  }
+
+  updateProgress() {
+    if (this.onProgress && this.slices.length > 0) {
+      const percentage = Math.round((this.currentSliceIndex / this.slices.length) * 100);
+      this.onProgress(percentage);
+
+      // Check if brush is exhausted
+      if (this.currentSliceIndex >= this.slices.length && this.onExhausted) {
+        this.onExhausted(true);
+      }
+    }
+  }
+
+  reset() {
+    this.currentSliceIndex = 0;
+    this.updateProgress();
+
+    // Reset exhausted state
+    if (this.onExhausted) {
+      this.onExhausted(false);
+    }
   }
 
   onMouseDown(pointer) {
     this.path = [pointer];
-    this.currentSliceIndex = 0;
+    // this.currentSliceIndex = 0;
     this.canvas.requestRenderAll();
   }
 
   onMouseMove(pointer) {
+    console.log("onMouseMove", this.path.length);
     if (this.path.length > 0) {
       this.path.push(pointer);
       this.drawSliceAtPoint(pointer);
@@ -60,13 +89,18 @@ class RibbonBrush extends fabric.BaseBrush {
 
   onMouseUp() {
     this.path = [];
-    this.currentSliceIndex = 0;
+    // this.currentSliceIndex = 0;
   }
 
   drawSliceAtPoint(point) {
     if (this.slices.length === 0) return;
 
-    const slice = this.slices[this.currentSliceIndex % this.slices.length];
+    // Check if we're out of slices
+    if (this.currentSliceIndex >= this.slices.length) {
+      return; // Don't draw if exhausted
+    }
+
+    const slice = this.slices[this.currentSliceIndex];
 
     // Calculate angle from previous point if available
     let angle = 0;
@@ -89,6 +123,7 @@ class RibbonBrush extends fabric.BaseBrush {
 
     this.canvas.add(fabricImage);
     this.currentSliceIndex++;
+    this.updateProgress(); // Update progress after incrementing
   }
 }
 
@@ -96,11 +131,12 @@ function App() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [textContent, setTextContent] = useState("");
-  const [debugImages, setDebugImages] = useState({});
   const [processedImage, setProcessedImage] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentPage, setCurrentPage] = useState("upload"); // "upload" or "results"
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [ribbonProgress, setRibbonProgress] = useState(0);
+  const [ribbonExhausted, setRibbonExhausted] = useState(false);
   const [brushType, setBrushType] = useState("pencil"); // "pencil", "ribbon", or "text"
   const [textSentences, setTextSentences] = useState([]);
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
@@ -227,7 +263,16 @@ function App() {
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => {
-        ribbonBrush.current = new RibbonBrush(fabricCanvasInstance.current, img);
+        ribbonBrush.current = new RibbonBrush(
+          fabricCanvasInstance.current,
+          img,
+          (percentage) => {
+            setRibbonProgress(percentage);
+          },
+          (exhausted) => {
+            setRibbonExhausted(exhausted);
+          }
+        );
       };
       img.src = processedImage;
     }
@@ -235,8 +280,14 @@ function App() {
 
   // Switch brush type
   const switchBrushType = (type) => {
+    // Don't allow switching to ribbon if exhausted
+    if (type === "ribbon" && ribbonExhausted) {
+      return;
+    }
+
     setBrushType(type);
     brushTypeRef.current = type; // Update ref for event handlers
+
     if (fabricCanvasInstance.current) {
       if (type === "pencil") {
         const brush = new fabric.PencilBrush(fabricCanvasInstance.current);
@@ -254,28 +305,55 @@ function App() {
     }
   };
 
-  const handleImageUpload = (event) => {
+  // Convert HEIC to JPEG
+  const convertHeicToJpeg = async (file) => {
+    if (file.type === "image/heic" || file.name.toLowerCase().endsWith(".heic")) {
+      try {
+        const convertedBlob = await heicTo({
+          blob: file,
+          type: "image/jpeg",
+          quality: 0.8,
+        });
+
+        // Create a new File object from the converted blob
+        const convertedFile = new File([convertedBlob], file.name.replace(/\.heic$/i, ".jpg"), {
+          type: "image/jpeg",
+          lastModified: Date.now(),
+        });
+
+        return convertedFile;
+      } catch (error) {
+        console.error("Error converting HEIC to JPEG:", error);
+        return file; // Return original file if conversion fails
+      }
+    }
+    return file; // Return original file if not HEIC
+  };
+
+  const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (file) {
-      setSelectedImage(file);
+      const convertedFile = await convertHeicToJpeg(file);
+      setSelectedImage(convertedFile);
       const reader = new FileReader();
       reader.onload = (e) => {
         setImagePreview(e.target.result);
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(convertedFile);
     }
   };
 
-  const handleImageDrop = (event) => {
+  const handleImageDrop = async (event) => {
     event.preventDefault();
     const file = event.dataTransfer.files[0];
-    if (file && file.type.startsWith("image/")) {
-      setSelectedImage(file);
+    if (file && (file.type.startsWith("image/") || file.name.toLowerCase().endsWith(".heic"))) {
+      const convertedFile = await convertHeicToJpeg(file);
+      setSelectedImage(convertedFile);
       const reader = new FileReader();
       reader.onload = (e) => {
         setImagePreview(e.target.result);
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(convertedFile);
     }
   };
 
@@ -286,7 +364,6 @@ function App() {
   const clearImage = () => {
     setSelectedImage(null);
     setImagePreview(null);
-    setDebugImages({});
     setProcessedImage(null);
     setCurrentPage("upload");
   };
@@ -306,7 +383,6 @@ function App() {
 
     setIsProcessing(true);
     setLoadingProgress(0);
-    setDebugImages({});
     setProcessedImage(null);
 
     try {
@@ -484,7 +560,6 @@ function App() {
           }
         }
 
-        setDebugImages(debugImages);
         setLoadingProgress(90);
 
         // Clean up
@@ -550,7 +625,9 @@ function App() {
     <div className="app">
       {isProcessing && <LoadingOverlay />}
       <div className="terminal-header">
-        <div className="header-text accent">draw with your journal entries</div>
+        <div className="header-text">
+          draw with your <span className="accent">journal entries</span>
+        </div>
         <div className="status-bar">(づ๑•ᴗ•๑)づ♡ {new Date().toLocaleTimeString()}</div>
       </div>
 
@@ -559,12 +636,29 @@ function App() {
           <>
             <div className="section">
               <div className="section-header">
-                <span className="section-title">[IMAGE UPLOAD MODULE]</span>
-                {selectedImage && (
-                  <button className="clear-btn" onClick={clearImage}>
-                    [CLEAR]
-                  </button>
-                )}
+                <span className="section-title">
+                  [IMAGES OF YOUR <span className="accent">PHYSICAL JOURNAL ENTRIES</span>]
+                </span>
+                <div className="section-header-right">
+                  <span className="info-icon">
+                    i
+                    <div className="info-tooltip">
+                      <div className="tooltip-title">[UPLOAD GUIDELINES]</div>
+                      <ul className="tooltip-list">
+                        <li>SUPPORTED FORMATS: JPG, PNG, HEIC, WEBP</li>
+                        <li>OPTIMAL: HIGH CONTRAST DARK TEXT ON LIGHT BACKGROUND</li>
+                        <li>ONLY THE PAGE (NO BACKGROUND)</li>
+                        <li>MAKE SURE LINES OF TEXT ARE STRAIGHT</li>
+                        <li>AVOID: BLURRY OR LOW RESOLUTION IMAGES</li>
+                      </ul>
+                    </div>
+                  </span>
+                  {selectedImage && (
+                    <button className="clear-btn" onClick={clearImage}>
+                      [CLEAR]
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div
@@ -605,7 +699,9 @@ function App() {
 
             <div className="section">
               <div className="section-header">
-                <span className="section-title">[TEXT INPUT MODULE]</span>
+                <span className="section-title">
+                  [TEXT FROM YOUR <span className="accent">DIGITAL JOURNAL ENTRIES</span>]
+                </span>
                 {textContent && (
                   <button className="clear-btn" onClick={clearText}>
                     [CLEAR]
@@ -659,7 +755,7 @@ function App() {
               </div>
             </div>
 
-            {/* Debug Images Section */}
+            {/* Debug Images Section
             {Object.keys(debugImages).length > 0 && (
               <div className="section">
                 <div className="section-header">
@@ -674,7 +770,7 @@ function App() {
                   ))}
                 </div>
               </div>
-            )}
+            )} */}
 
             {/* Processed Image Section */}
             {processedImage && (
@@ -695,7 +791,7 @@ function App() {
             {/* Drawing Canvas Section */}
             <div className="section">
               <div className="section-header">
-                <span className="section-title">[DRAWING CANVAS]</span>
+                <span className="section-title">[NOW DRAW!]</span>
                 <div className="canvas-controls">
                   <div className="brush-selector">
                     <button
@@ -719,6 +815,25 @@ function App() {
                       [TEXT]
                     </button>
                   </div>
+                  {brushType === "ribbon" && (
+                    <div className="ribbon-progress">
+                      <span>
+                        {ribbonExhausted
+                          ? "RIBBON EXHAUSTED"
+                          : `RIBBON PROGRESS: ${ribbonProgress}%`}
+                      </span>
+                      <button
+                        className="reset-btn"
+                        onClick={() => {
+                          if (ribbonBrush.current) {
+                            ribbonBrush.current.reset();
+                          }
+                        }}
+                      >
+                        [RESET]
+                      </button>
+                    </div>
+                  )}
                   {textSentences.length > 0 && (
                     <div className="text-status">
                       {currentSentenceIndex < textSentences.length ? (
@@ -761,17 +876,17 @@ function App() {
             </div>
 
             <div className="action-panel">
-              <button className="action-btn" onClick={goBack}>
-                [PROCESS ANOTHER IMAGE]
-              </button>
               <button
-                className="action-btn secondary"
+                className="action-btn"
                 onClick={() => {
                   clearImage();
                   clearText();
                 }}
               >
-                [CLEAR ALL]
+                [RESTART]
+              </button>
+              <button className="action-btn secondary" onClick={goBack}>
+                [CHANGE INPUTS]
               </button>
             </div>
           </>
@@ -780,8 +895,10 @@ function App() {
 
       <div className="footer">
         <div className="footer-text">
-          SYSTEM STATUS: {isProcessing ? "PROCESSING" : "OPERATIONAL"} | MEMORY:{" "}
-          {((selectedImage?.size || 0) / 1024).toFixed(2)} KB
+          STATUS: {isProcessing ? "PROCESSING" : "OPERATIONAL"} | made with{" "}
+          <a target="_blank" href="https://github.com/49emily/journal-draw">
+            🩷
+          </a>
         </div>
       </div>
 

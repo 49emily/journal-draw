@@ -1,1 +1,1 @@
-scripts i used to test opencv best transforms to exxtract handwritten lines and chars
+scripts i used to test opencv best transforms to extract handwritten lines and chars

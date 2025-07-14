@@ -10,9 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "fabric": "^6.7.0",
-    "heic-convert": "^2.1.0",
     "@techstark/opencv-js": "^4.9.0-release.3",
+    "fabric": "^6.7.0",
+    "heic-to": "^1.2.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tesseract.js": "^6.0.1"
