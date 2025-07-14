@@ -387,7 +387,7 @@
   right: 0;
   background: rgba(255, 255, 255, 0.1);
   border-top: 1px solid #ffffff;
-  padding: 0px 20px 10px 20px;
+  padding: 10px 20px 10px 20px;
   font-size: 12px;
   text-align: center;
   color: #cccccc;
@@ -678,8 +678,8 @@
 
 .ribbon-progress {
   font-size: 10px;
-  color: #fb1abf;
-  text-shadow: 0 0 3px #fb1abf;
+  color: #cccccc;
+  text-shadow: 0 0 3px #ffffff;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -740,4 +740,18 @@
   font-size: 24px;
   position: relative;
   top: 2px;
+}
+
+.github-icon {
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  top: 1px;
+  margin-left: 1px;
+  transition: color 0.3s ease;
+}
+
+.github-icon:hover {
+  color: #ffffff;
+  text-shadow: 0 0 10px #ffffff;
 }
