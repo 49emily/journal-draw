@@ -162,7 +162,7 @@ function App() {
       const handleResize = () => {
         if (fabricCanvasInstance.current) {
           const isMobile = window.innerWidth <= 768;
-          const canvasWidth = isMobile ? Math.min(window.innerWidth - 20, 500) : 700;
+          const canvasWidth = isMobile ? Math.min(window.innerWidth - 40, 400) : 700;
           const canvasHeight = isMobile ? canvasWidth * 1.5 : 700; // Make mobile canvas taller
           fabricCanvasInstance.current.setDimensions({
             width: canvasWidth,
