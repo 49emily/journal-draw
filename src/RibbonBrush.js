@@ -1,7 +1,7 @@
 import * as fabric from "fabric";
 
 class RibbonBrush extends fabric.BaseBrush {
-  constructor(canvas, image, onProgress, onExhausted) {
+  constructor(canvas, image, onProgress) {
     super(canvas);
     this.image = image;
     this.sliceWidth = 20;
@@ -9,7 +9,6 @@ class RibbonBrush extends fabric.BaseBrush {
     this.currentSliceIndex = 0;
     this.path = [];
     this.onProgress = onProgress;
-    this.onExhausted = onExhausted;
     this.createSlices();
   }
 
@@ -47,29 +46,15 @@ class RibbonBrush extends fabric.BaseBrush {
 
   updateProgress() {
     if (this.onProgress && this.slices.length > 0) {
-      const percentage = Math.round((this.currentSliceIndex / this.slices.length) * 100);
+      const percentage = Math.round(
+        ((this.currentSliceIndex % this.slices.length) / this.slices.length) * 100
+      );
       this.onProgress(percentage);
-
-      // Check if brush is exhausted
-      if (this.currentSliceIndex >= this.slices.length && this.onExhausted) {
-        this.onExhausted(true);
-      }
-    }
-  }
-
-  reset() {
-    this.currentSliceIndex = 0;
-    this.updateProgress();
-
-    // Reset exhausted state
-    if (this.onExhausted) {
-      this.onExhausted(false);
     }
   }
 
   onMouseDown(pointer) {
     this.path = [pointer];
-    // this.currentSliceIndex = 0;
     this.canvas.requestRenderAll();
   }
 
@@ -83,18 +68,14 @@ class RibbonBrush extends fabric.BaseBrush {
 
   onMouseUp() {
     this.path = [];
-    // this.currentSliceIndex = 0;
   }
 
   drawSliceAtPoint(point) {
     if (this.slices.length === 0) return;
 
-    // Check if we're out of slices
-    if (this.currentSliceIndex >= this.slices.length) {
-      return; // Don't draw if exhausted
-    }
-
-    const slice = this.slices[this.currentSliceIndex];
+    // Loop back to beginning when we reach the end
+    const sliceIndex = this.currentSliceIndex % this.slices.length;
+    const slice = this.slices[sliceIndex];
 
     // Calculate angle from previous point if available
     let angle = 0;
@@ -117,7 +98,7 @@ class RibbonBrush extends fabric.BaseBrush {
 
     this.canvas.add(fabricImage);
     this.currentSliceIndex++;
-    this.updateProgress(); // Update progress after incrementing
+    this.updateProgress();
   }
 }
 

@@ -13,8 +13,6 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentPage, setCurrentPage] = useState("upload"); // "upload" or "results"
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [ribbonProgress, setRibbonProgress] = useState(0);
-  const [ribbonExhausted, setRibbonExhausted] = useState(false);
   const [brushType, setBrushType] = useState("pencil"); // "pencil", "ribbon", or "text"
   const [textSentences, setTextSentences] = useState([]);
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
@@ -92,7 +90,7 @@ function App() {
     } else {
       setBrushType("pencil");
     }
-  }, [processedImage, textContent]);
+  }, [currentPage, processedImage, textContent]);
 
   // Initialize Fabric canvas
   useEffect(() => {
@@ -111,29 +109,22 @@ function App() {
         isDrawingMode: true,
       });
 
-      // // Enable drawing mode and set up a white pencil brush
-      // const brush = new fabric.PencilBrush(canvas);
-      // brush.color = "#ffffff";
-      // brush.width = 3;
-      // canvas.freeDrawingBrush = brush;
-
       // Ensure background stays black
       canvas.backgroundColor = "#000000";
       canvas.renderAll();
 
       // Set up text-on-path functionality
       canvas.on("before:path:created", function (opt) {
-        if (
-          brushTypeRef.current === "text" &&
-          textSentencesRef.current.length > 0 &&
-          currentSentenceIndexRef.current < textSentencesRef.current.length
-        ) {
+        if (brushTypeRef.current === "text" && textSentencesRef.current.length > 0) {
           const path = opt.path;
           const pathInfo = fabric.util.getPathSegmentsInfo(path.path);
           console.log(pathInfo);
           path.segmentsInfo = pathInfo;
           const pathLength = pathInfo[pathInfo.length - 1].length;
-          const text = textSentencesRef.current[currentSentenceIndexRef.current];
+          const text =
+            textSentencesRef.current[
+              currentSentenceIndexRef.current % textSentencesRef.current.length
+            ];
           const fontSize = (2.5 * pathLength) / text.length;
           const fText = new fabric.FabricText(text, {
             fontSize: fontSize,
@@ -144,8 +135,9 @@ function App() {
           });
           canvas.add(fText);
 
-          // Move to next sentence
-          currentSentenceIndexRef.current += 1;
+          // Move to next sentence (loop back to beginning when reaching end)
+          currentSentenceIndexRef.current =
+            (currentSentenceIndexRef.current + 1) % textSentencesRef.current.length;
           setCurrentSentenceIndex(currentSentenceIndexRef.current);
         }
       });
@@ -194,16 +186,7 @@ function App() {
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => {
-        ribbonBrush.current = new RibbonBrush(
-          fabricCanvasInstance.current,
-          img,
-          (percentage) => {
-            setRibbonProgress(percentage);
-          },
-          (exhausted) => {
-            setRibbonExhausted(exhausted);
-          }
-        );
+        ribbonBrush.current = new RibbonBrush(fabricCanvasInstance.current, img);
       };
       img.src = processedImage;
     }
@@ -211,8 +194,6 @@ function App() {
 
   // Switch brush type
   const switchBrushType = (type) => {
-    // Don't allow switching to ribbon if exhausted
-
     setBrushType(type);
   };
 
@@ -783,35 +764,7 @@ function App() {
                       [DRAW]
                     </button>
                   </div>
-                  {brushType === "ribbon" && (
-                    <div className="ribbon-progress">
-                      <span>
-                        {ribbonExhausted ? "WRITING EXHAUSTED" : `WRITING USED: ${ribbonProgress}%`}
-                      </span>
-                      <button
-                        className="reset-btn"
-                        onClick={() => {
-                          if (ribbonBrush.current) {
-                            ribbonBrush.current.reset();
-                          }
-                        }}
-                      >
-                        [RESET]
-                      </button>
-                    </div>
-                  )}
-                  {brushType === "text" && textSentences.length > 0 && (
-                    <div className="text-status">
-                      {currentSentenceIndex < textSentences.length ? (
-                        <span>SENTENCES: {textSentences.length - currentSentenceIndex} LEFT</span>
-                      ) : (
-                        <span>NO SENTENCES LEFT</span>
-                      )}{" "}
-                      <button className="reset-btn" onClick={() => setCurrentSentenceIndex(0)}>
-                        [RESET]
-                      </button>
-                    </div>
-                  )}
+
                   <button
                     className="clear-btn"
                     onClick={() => {
