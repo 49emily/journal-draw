@@ -50,6 +50,9 @@ function App() {
 
   // Keep brushTypeRef in sync with brushType
   useEffect(() => {
+    console.log("brushType", brushType);
+    console.log("fabricCanvasInstance", fabricCanvasInstance.current);
+    console.log("ribbonBrush", ribbonBrush.current);
     brushTypeRef.current = brushType;
 
     if (fabricCanvasInstance.current) {
@@ -67,7 +70,7 @@ function App() {
         fabricCanvasInstance.current.freeDrawingBrush = brush;
       }
     }
-  }, [brushType]);
+  }, [brushType, fabricCanvasInstance]);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -80,17 +83,16 @@ function App() {
 
   // Set default brush type when entering results page
   useEffect(() => {
-    if (currentPage === "results") {
-      // Priority: ribbon (if image) > text (if text) > pencil (fallback)
-      if (processedImage) {
-        setBrushType("ribbon");
-      } else if (textContent) {
-        setBrushType("text");
-      } else {
-        setBrushType("pencil");
-      }
+    // Priority: ribbon (if image) > text (if text) > pencil (fallback)
+    if (processedImage) {
+      console.log("setting ribbon brush");
+      setBrushType("ribbon");
+    } else if (textContent) {
+      setBrushType("text");
+    } else {
+      setBrushType("pencil");
     }
-  }, [currentPage, processedImage, textContent]);
+  }, [processedImage, textContent]);
 
   // Initialize Fabric canvas
   useEffect(() => {
@@ -330,22 +332,29 @@ function App() {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext("2d");
 
-            // Scale image down (similar to Python's 18% scale)
-            const scale = 0.18;
-            const scaledWidth = Math.floor(img.width * scale);
-            const scaledHeight = Math.floor(img.height * scale);
+            console.log("img.width", img.width);
+            console.log("img.height", img.height);
 
-            canvas.width = scaledWidth;
-            canvas.height = scaledHeight;
-            ctx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
+            // Draw image at original size to canvas
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
 
             // Get image data and create OpenCV matrix
-            const imageData = ctx.getImageData(0, 0, scaledWidth, scaledHeight);
+            const imageData = ctx.getImageData(0, 0, img.width, img.height);
             const src = cv.matFromImageData(imageData);
+
+            // Scale using OpenCV (like Python script)
+            const scaledWidth = 550;
+            const scale = scaledWidth / img.width;
+            const scaledHeight = Math.floor(img.height * scale);
+
+            const scaled = new cv.Mat();
+            cv.resize(src, scaled, new cv.Size(scaledWidth, scaledHeight), 0, 0, cv.INTER_AREA);
 
             // Convert to grayscale
             const gray = new cv.Mat();
-            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+            cv.cvtColor(scaled, gray, cv.COLOR_RGBA2GRAY);
 
             // Apply median blur
             const blurred = new cv.Mat();
@@ -582,10 +591,9 @@ function App() {
                       <div className="tooltip-title">[UPLOAD GUIDELINES]</div>
                       <ul className="tooltip-list">
                         <li>SUPPORTED FORMATS: JPG, PNG, HEIC, WEBP</li>
-                        <li>OPTIMAL: HIGH CONTRAST DARK TEXT ON LIGHT BACKGROUND</li>
-                        <li>ONLY THE PAGE (NO BACKGROUND)</li>
+                        <li>ONLY THE PAGE (NO BACKGROUND) !!!</li>
                         <li>MAKE SURE LINES OF TEXT ARE STRAIGHT</li>
-                        <li>AVOID: BLURRY OR LOW RESOLUTION IMAGES</li>
+                        <li>OPTIMAL: HIGH CONTRAST DARK TEXT ON LIGHT BACKGROUND</li>
                       </ul>
                     </div>
                   </span>

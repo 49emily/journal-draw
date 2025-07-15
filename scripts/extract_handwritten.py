@@ -31,8 +31,10 @@ def read_image(img_path):
     image = cv2.imread(img_path)
 
     scale_percent = 18  # percent of original size
-    width = int(image.shape[1] * scale_percent / 100)
-    height = int(image.shape[0] * scale_percent / 100)
+    # width = int(image.shape[1] * scale_percent / 100)
+    # height = int(image.shape[0] * scale_percent / 100)
+    width = 550
+    height = int(image.shape[0] * width / image.shape[1])
     dim = (width, height)
     rescaled_img = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
     return image, rescaled_img
@@ -283,3 +285,17 @@ def extract_text_chars(img, output_dir):
         roi = img[y : y + h, x : x + w]
         filename = "char" + str(char_idx) + ".jpg"
         save_img(chars_path, filename=filename, img=roi)
+
+
+if __name__ == "__main__":
+    # provide the indut/outpur directory paths
+    input_dir = os.path.join(os.getcwd(), "images")
+    output_dir = os.path.join(os.getcwd(), "output")
+
+    for img_file in os.listdir(input_dir):
+        img_file_path = os.path.join(input_dir, img_file)
+        image, rescaled_image = read_image(img_path=img_file_path)
+        img_out_dir = os.path.join(output_dir, img_file.split(".")[0])
+        extract_text_lines(rescaled_image, img_out_dir)
+        extract_handwriting_png(img_out_dir)
+        # extract_text_chars(image, img_out_dir)

@@ -1,16 +1,15 @@
 import * as fabric from "fabric";
 
-// Custom Ribbon Brush that draws image slices along the path
 class RibbonBrush extends fabric.BaseBrush {
   constructor(canvas, image, onProgress, onExhausted) {
     super(canvas);
     this.image = image;
-    this.sliceWidth = 20; // Width of each slice
+    this.sliceWidth = 20;
     this.slices = [];
     this.currentSliceIndex = 0;
     this.path = [];
-    this.onProgress = onProgress; // Callback to update parent component
-    this.onExhausted = onExhausted; // Callback when brush is exhausted
+    this.onProgress = onProgress;
+    this.onExhausted = onExhausted;
     this.createSlices();
   }
 
@@ -75,7 +74,6 @@ class RibbonBrush extends fabric.BaseBrush {
   }
 
   onMouseMove(pointer) {
-    console.log("onMouseMove", this.path.length);
     if (this.path.length > 0) {
       this.path.push(pointer);
       this.drawSliceAtPoint(pointer);
