@@ -68,7 +68,7 @@ function App() {
         fabricCanvasInstance.current.freeDrawingBrush = brush;
       }
     }
-  }, [brushType, fabricCanvasInstance]);
+  }, [brushType]);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -81,16 +81,18 @@ function App() {
 
   // Set default brush type when entering results page
   useEffect(() => {
-    // Priority: ribbon (if image) > text (if text) > pencil (fallback)
-    if (processedImage) {
-      console.log("setting ribbon brush");
-      setBrushType("ribbon");
-    } else if (textContent) {
-      setBrushType("text");
-    } else {
-      setBrushType("pencil");
+    if (currentPage === "results") {
+      // Priority: ribbon (if image) > text (if text) > pencil (fallback)
+      if (processedImage) {
+        console.log("setting ribbon brush");
+        setBrushType("ribbon");
+      } else if (textContent) {
+        setBrushType("text");
+      } else {
+        setBrushType("pencil");
+      }
     }
-  }, [currentPage, processedImage, textContent]);
+  }, [currentPage]);
 
   // Initialize Fabric canvas
   useEffect(() => {
@@ -150,6 +152,21 @@ function App() {
 
       fabricCanvasInstance.current = canvas;
 
+      // Set up initial brush based on current brush type
+      if (brushType === "pencil") {
+        const brush = new fabric.PencilBrush(canvas);
+        brush.color = "#ffffff";
+        brush.width = 3;
+        canvas.freeDrawingBrush = brush;
+      } else if (brushType === "ribbon" && ribbonBrush.current) {
+        canvas.freeDrawingBrush = ribbonBrush.current;
+      } else if (brushType === "text") {
+        const brush = new fabric.PencilBrush(canvas);
+        brush.color = "#ffffff";
+        brush.width = 1;
+        canvas.freeDrawingBrush = brush;
+      }
+
       // Handle window resize for mobile responsiveness
       const handleResize = () => {
         if (fabricCanvasInstance.current) {
@@ -187,10 +204,14 @@ function App() {
       img.crossOrigin = "anonymous";
       img.onload = () => {
         ribbonBrush.current = new RibbonBrush(fabricCanvasInstance.current, img);
+        // If currently using ribbon brush, update the canvas brush
+        if (brushType === "ribbon") {
+          fabricCanvasInstance.current.freeDrawingBrush = ribbonBrush.current;
+        }
       };
       img.src = processedImage;
     }
-  }, [processedImage]);
+  }, [processedImage, brushType]);
 
   // Switch brush type
   const switchBrushType = (type) => {
