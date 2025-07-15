@@ -143,6 +143,23 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
 }
 
+/* Mobile tooltip positioning to prevent off-screen issues */
+@media (max-width: 768px) {
+  .info-tooltip {
+    left: auto;
+    right: 0;
+    transform: none;
+    min-width: 250px;
+    max-width: calc(100vw - 40px);
+  }
+
+  .info-tooltip::before {
+    left: auto;
+    right: 8px;
+    transform: none;
+  }
+}
+
 .info-tooltip::before {
   content: "";
   position: absolute;
