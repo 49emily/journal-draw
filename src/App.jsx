@@ -101,11 +101,12 @@ function App() {
     if (currentPage === "results" && fabricCanvasRef.current && !fabricCanvasInstance.current) {
       // Calculate canvas size based on screen width
       const isMobile = window.innerWidth <= 768;
-      const canvasSize = isMobile ? Math.min(window.innerWidth - 40, 400) : 700;
+      const canvasWidth = isMobile ? Math.min(window.innerWidth - 40, 400) : 700;
+      const canvasHeight = isMobile ? canvasWidth * 1.5 : 700; // Make mobile canvas taller
 
       const canvas = new fabric.Canvas(fabricCanvasRef.current, {
-        width: canvasSize,
-        height: canvasSize,
+        width: canvasWidth,
+        height: canvasHeight,
         backgroundColor: "#000000",
         isDrawingMode: true,
       });
@@ -161,10 +162,11 @@ function App() {
       const handleResize = () => {
         if (fabricCanvasInstance.current) {
           const isMobile = window.innerWidth <= 768;
-          const canvasSize = isMobile ? Math.min(window.innerWidth - 40, 400) : 700;
+          const canvasWidth = isMobile ? Math.min(window.innerWidth - 40, 400) : 700;
+          const canvasHeight = isMobile ? canvasWidth * 1.5 : 700; // Make mobile canvas taller
           fabricCanvasInstance.current.setDimensions({
-            width: canvasSize,
-            height: canvasSize,
+            width: canvasWidth,
+            height: canvasHeight,
           });
         }
       };
